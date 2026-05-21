@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureVoice — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+</head>
+<body>
+<div class="sv-root" style="align-items:flex-start; padding-top: 48px;">
+  <div class="sv-card" style="max-width:500px;">
+    <div class="sv-logo">
+      <span class="sv-logo-mark">
+        <span class="sv-logo-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2 L12 22 M2 12 L22 12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        </span>
+        <span class="sv-logo-text">SecureVoice</span>
+      </span>
+    </div>
+
+    <h1 class="sv-title" style="font-style:normal; font-size:22px; margin-bottom:6px;">Create a private message</h1>
+    <p class="sv-subtitle">Upload audio + register recipient's face</p>
+
+    <div class="sv-divider"></div>
+
+    <!-- Step 1: Upload Audio -->
+    <span class="sv-label">1 — Upload audio file</span>
+    <input type="file" id="audioFile" accept=".mp3,.wav,.ogg,.m4a,.aac" class="sv-input" style="padding:8px 12px;" />
+    <button class="sv-btn" id="btnUpload">Upload Audio</button>
+    <p id="uploadStatus" class="sv-footnote mt-8" style="display:none;"></p>
+
+    <div class="sv-divider"></div>
+
+    <!-- Step 2: Capture Reference Face -->
+    <span class="sv-label">2 — Capture recipient face</span>
+    <p class="sv-footnote" style="margin-bottom:16px; color: var(--text-soft);">
+      Have the recipient sit in front of the camera, then capture their face embedding.
+    </p>
+
+    <div class="sv-camera-wrap" id="adminCamera" style="display:none; margin-bottom:16px;">
+      <video id="adminVideo" class="sv-video" autoplay muted playsinline></video>
+      <canvas id="adminOverlay" class="sv-canvas-overlay"></canvas>
+      <div class="sv-corners"><span></span></div>
+    </div>
+
+    <button class="sv-btn sv-btn-ghost" id="btnCamera">Open Camera</button>
+    <button class="sv-btn" id="btnCapture" style="display:none; margin-top:8px;">Capture Face</button>
+    <p id="captureStatus" class="sv-footnote mt-8" style="display:none;"></p>
+
+    <div class="sv-divider"></div>
+
+    <!-- Step 3: Generate Token -->
+    <span class="sv-label">3 — Generate secure link</span>
+    <button class="sv-btn" id="btnGenerate" disabled>Generate Link</button>
+
+    <div class="sv-token-output" id="tokenOutput"></div>
+    <button class="sv-btn sv-btn-ghost mt-8" id="btnCopy" style="display:none;">Copy Link</button>
+
+  </div>
+</div>
+
+<script>
+(async function () {
+  'use strict';
+
+  const API_BASE    = window.location.origin;
+  const MODEL_URL   = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+
+  let uploadedFilename = null;
+  let faceDescriptor   = null;
+  let cameraStream     = null;
+  let generatedLink    = null;
+
+  // ── Upload audio ───────────────────────────────────────────────────────────
+  document.getElementById('btnUpload').addEventListener('click', async () => {
+    const file = document.getElementById('audioFile').files[0];
+    if (!file) { alert('Please select an audio file.'); return; }
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    const statusEl = document.getElementById('uploadStatus');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Uploading…';
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/admin/upload-audio`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Upload failed');
+      uploadedFilename = data.filename;
+      statusEl.textContent = '✓ Uploaded: ' + uploadedFilename;
+      checkReady();
+    } catch (e) {
+      statusEl.textContent = '✗ ' + e.message;
+    }
+  });
+
+  // ── Camera ─────────────────────────────────────────────────────────────────
+  document.getElementById('btnCamera').addEventListener('click', async () => {
+    // Load models
+    document.getElementById('captureStatus').style.display = 'block';
+    document.getElementById('captureStatus').textContent   = 'Loading face models…';
+
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+      ]);
+    } catch (e) {
+      document.getElementById('captureStatus').textContent = '✗ Could not load models.';
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    cameraStream = stream;
+    const videoEl = document.getElementById('adminVideo');
+    videoEl.srcObject = stream;
+    await new Promise(r => { videoEl.onloadedmetadata = r; });
+    videoEl.play();
+
+    document.getElementById('adminCamera').style.display = 'block';
+    document.getElementById('btnCapture').style.display  = 'block';
+    document.getElementById('btnCamera').style.display   = 'none';
+    document.getElementById('captureStatus').textContent = 'Camera ready. Click Capture.';
+  });
+
+  // ── Capture face ────────────────────────────────────────────────────────────
+  document.getElementById('btnCapture').addEventListener('click', async () => {
+    const videoEl  = document.getElementById('adminVideo');
+    const statusEl = document.getElementById('captureStatus');
+
+    // Collect multiple embeddings and average them for a more stable reference.
+    const SAMPLES   = 10;
+    const REQUIRED  = 8;   // need at least this many valid detections
+    const collected = [];
+
+    for (let i = 0; i < SAMPLES; i++) {
+      statusEl.textContent = `Sampling face… (${collected.length}/${REQUIRED} good frames)`;
+      await new Promise(r => setTimeout(r, 120));   // small gap between frames
+
+      const det = await faceapi
+        .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.7 }))
+        .withFaceLandmarks(true)
+        .withFaceDescriptor();
+
+      if (det) collected.push(Array.from(det.descriptor));
+    }
+
+    if (collected.length < REQUIRED) {
+      statusEl.textContent = `✗ Only ${collected.length}/${REQUIRED} clean frames. Move closer & retry.`;
+      return;
+    }
+
+    // Average all collected descriptors (reduces per-frame noise)
+    const dim = collected[0].length;
+    const avg = new Array(dim).fill(0);
+    collected.forEach(d => d.forEach((v, i) => { avg[i] += v; }));
+    faceDescriptor = avg.map(v => v / collected.length);
+
+    statusEl.textContent = `✓ Face registered (${collected.length} samples averaged).`;
+
+    // Stop camera
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+    document.getElementById('adminCamera').style.display = 'none';
+    document.getElementById('btnCapture').style.display  = 'none';
+
+    checkReady();
+  });
+
+  // ── Check if ready to generate ──────────────────────────────────────────────
+  function checkReady() {
+    document.getElementById('btnGenerate').disabled = !(uploadedFilename && faceDescriptor);
+  }
+
+  // ── Generate token ──────────────────────────────────────────────────────────
+  document.getElementById('btnGenerate').addEventListener('click', async () => {
+    const outEl = document.getElementById('tokenOutput');
+    outEl.textContent = 'Generating…';
+    outEl.classList.add('visible');
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/admin/create-token`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          audio_filename: uploadedFilename,
+          face_embedding: faceDescriptor,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Token creation failed');
+      generatedLink = data.url;
+      outEl.textContent = data.url;
+      document.getElementById('btnCopy').style.display = 'block';
+    } catch (e) {
+      outEl.textContent = '✗ Error: ' + e.message;
+    }
+  });
+
+  // ── Copy link ───────────────────────────────────────────────────────────────
+  document.getElementById('btnCopy').addEventListener('click', () => {
+    navigator.clipboard.writeText(generatedLink);
+    document.getElementById('btnCopy').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('btnCopy').textContent = 'Copy Link'; }, 2000);
+  });
+
+})();
+</script>
+</body>
+</html>

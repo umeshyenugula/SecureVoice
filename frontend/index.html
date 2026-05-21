@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureVoice — Private Message</title>
+
+  <!-- Disable caching -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/static/css/style.css" />
+
+  <!-- face-api.js from CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+</head>
+<body>
+
+  <div class="sv-root">
+    <div class="sv-card">
+
+      <!-- Logo -->
+      <div class="sv-logo">
+        <span class="sv-logo-mark">
+          <span class="sv-logo-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2 L12 22 M2 12 L22 12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+          </span>
+          <span class="sv-logo-text">SecureVoice</span>
+        </span>
+      </div>
+
+      <!-- ── SCREEN 1: Initial / Checking token ────────────────────────────── -->
+      <div id="screen-loading" class="sv-screen active">
+        <div class="sv-spinner"></div>
+        <p class="sv-subtitle">Verifying access…</p>
+      </div>
+
+      <!-- ── SCREEN 2: Camera verification ────────────────────────────────── -->
+      <div id="screen-verify" class="sv-screen">
+        <h1 class="sv-title">Identity Verification</h1>
+        <p class="sv-subtitle">This message was meant for you. Let us confirm.</p>
+
+        <span class="sv-label">Position your face within the frame</span>
+
+        <div class="sv-camera-wrap" id="cameraWrap">
+          <video id="video" class="sv-video" autoplay muted playsinline></video>
+          <canvas id="overlay" class="sv-canvas-overlay"></canvas>
+          <div class="sv-scan-line" id="scanLine"></div>
+          <div class="sv-corners"><span></span></div>
+        </div>
+
+        <div class="sv-status" id="statusBar">
+          <span class="sv-status-dot" id="statusDot"></span>
+          <span id="statusText">Waiting for camera…</span>
+        </div>
+
+        <button class="sv-btn" id="btnStartVerify">Allow Camera Access</button>
+
+        <p class="sv-footnote">
+          Your image is <strong>never stored</strong>. Verification is local and one-time.
+        </p>
+      </div>
+
+      <!-- ── SCREEN 3: Loading models ──────────────────────────────────────── -->
+      <div id="screen-models" class="sv-screen">
+        <div class="sv-spinner"></div>
+        <h1 class="sv-title">Preparing verification</h1>
+        <p class="sv-subtitle">Loading identity models…</p>
+        <p class="sv-footnote mt-16">This may take a few seconds on first load.</p>
+      </div>
+
+      <!-- ── SCREEN 4: Scanning ────────────────────────────────────────────── -->
+      <div id="screen-scanning" class="sv-screen">
+        <div class="sv-camera-wrap" id="cameraWrapScan" style="margin-bottom:24px">
+          <video id="videoScan" class="sv-video" autoplay muted playsinline></video>
+          <canvas id="overlayScan" class="sv-canvas-overlay"></canvas>
+          <div class="sv-scan-line active" id="scanLineScan"></div>
+          <div class="sv-corners"><span></span></div>
+        </div>
+
+        <div class="sv-status" id="statusBarScan">
+          <span class="sv-status-dot scanning" id="statusDotScan"></span>
+          <span id="statusTextScan">Scanning face…</span>
+        </div>
+
+        <p class="sv-footnote">Keep still and look directly at the camera.</p>
+      </div>
+
+      <!-- ── SCREEN 5: Playing ─────────────────────────────────────────────── -->
+      <div id="screen-playing" class="sv-screen">
+        <h1 class="sv-title">Playing your message</h1>
+        <p class="sv-subtitle">Listen carefully. This plays once.</p>
+
+        <div class="sv-divider"></div>
+
+        <div class="sv-waveform" id="waveform">
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+          <div class="sv-waveform-bar"></div>
+        </div>
+
+        <div class="sv-progress-track">
+          <div class="sv-progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="sv-status">
+          <span class="sv-status-dot playing"></span>
+          <span id="playingStatus">Streaming…</span>
+        </div>
+
+        <p class="sv-footnote">
+          This link will be <strong>permanently disabled</strong> after playback ends.
+        </p>
+      </div>
+
+      <!-- ── SCREEN 6: Ended ───────────────────────────────────────────────── -->
+      <div id="screen-ended" class="sv-screen">
+        <div class="sv-expired-icon">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h1 class="sv-title">Message delivered</h1>
+        <p class="sv-subtitle">This message has been heard and will not play again.</p>
+        <div class="sv-divider"></div>
+        <p class="sv-footnote">The link has been permanently disabled. This window will close shortly.</p>
+      </div>
+
+      <!-- ── SCREEN 7: Error / Access Denied ──────────────────────────────── -->
+      <div id="screen-error" class="sv-screen">
+        <div class="sv-expired-icon">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </div>
+        <h1 class="sv-title" id="errorTitle">Access denied</h1>
+        <p class="sv-subtitle" id="errorMsg">This message is not for you, or it has already been played.</p>
+      </div>
+
+    </div><!-- /sv-card -->
+  </div><!-- /sv-root -->
+
+  <!-- Scripts -->
+  <script src="/static/js/security.js"></script>
+  <script src="/static/js/face-verify.js"></script>
+  <script src="/static/js/audio-player.js"></script>
+
+  <script>
+  (async function () {
+    'use strict';
+
+    // ── Config ───────────────────────────────────────────────────────────────
+    const API_BASE = window.location.origin;
+    const WS_BASE  = API_BASE.replace(/^http/, 'ws');
+    const TOKEN_ID = window.location.pathname.split('/').pop();
+
+    // ── Screen helpers ────────────────────────────────────────────────────────
+    const screens = {};
+    ['loading','verify','models','scanning','playing','ended','error'].forEach(id => {
+      screens[id] = document.getElementById('screen-' + id);
+    });
+
+    function showScreen(name) {
+      Object.values(screens).forEach(el => el.classList.remove('active'));
+      if (screens[name]) screens[name].classList.add('active');
+    }
+
+    function setStatus(dotEl, textEl, cls, text) {
+      dotEl.className = 'sv-status-dot' + (cls ? ' ' + cls : '');
+      textEl.textContent = text;
+    }
+
+    function showError(title, msg) {
+      document.getElementById('errorTitle').textContent = title;
+      document.getElementById('errorMsg').textContent   = msg;
+      showScreen('error');
+    }
+
+    // ── 1. Verify token is still valid ────────────────────────────────────────
+    showScreen('loading');
+
+    let tokenStatus;
+    try {
+      const res = await fetch(`${API_BASE}/api/token/${TOKEN_ID}/status`);
+      if (!res.ok) throw new Error('not_found');
+      tokenStatus = await res.json();
+    } catch (e) {
+      window.location.href = '/expired';
+      return;
+    }
+
+    if (!tokenStatus.valid) {
+      window.location.href = '/expired';
+      return;
+    }
+
+    // ── 2. Show verification screen ───────────────────────────────────────────
+    showScreen('verify');
+
+    const btnStart    = document.getElementById('btnStartVerify');
+    const statusDot   = document.getElementById('statusDot');
+    const statusText  = document.getElementById('statusText');
+    let cameraStream  = null;
+    let sessionId     = null;
+    let keyB64        = null;
+
+    btnStart.addEventListener('click', async () => {
+      btnStart.disabled = true;
+
+      // Load face-api models
+      showScreen('models');
+      try {
+        await FaceVerify.loadModels();
+      } catch (e) {
+        showError('Model load failed', 'Could not load face verification models. Check your connection.');
+        return;
+      }
+
+      // Start scanning screen
+      showScreen('scanning');
+      const videoScan   = document.getElementById('videoScan');
+      const overlayScan = document.getElementById('overlayScan');
+      const dotScan     = document.getElementById('statusDotScan');
+      const txtScan     = document.getElementById('statusTextScan');
+
+      try {
+        cameraStream = await FaceVerify.startCamera(videoScan);
+      } catch (e) {
+        showError('Camera access denied', 'Please allow camera access and try again.');
+        return;
+      }
+
+      setStatus(dotScan, txtScan, 'scanning', 'Scanning — keep still…');
+
+      FaceVerify.scanLoop(videoScan, overlayScan, async (descriptor) => {
+        setStatus(dotScan, txtScan, 'scanning', 'Verifying identity…');
+
+        let verifyRes;
+        try {
+          const res = await fetch(`${API_BASE}/api/verify-face`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ token_id: TOKEN_ID, face_descriptor: descriptor }),
+          });
+          verifyRes = await res.json();
+        } catch (e) {
+          showError('Verification failed', 'Network error during face verification.');
+          FaceVerify.stopCamera(cameraStream);
+          return;
+        }
+
+        FaceVerify.stopCamera(cameraStream);
+
+        if (!verifyRes.verified) {
+          showError('Identity not confirmed', verifyRes.message || 'Face does not match the intended recipient.');
+          return;
+        }
+
+        sessionId = verifyRes.session_id;
+        keyB64    = verifyRes.key_b64;
+
+        // ── 3. Start playback ──────────────────────────────────────────────
+        showScreen('playing');
+        const progressFill = document.getElementById('progressFill');
+
+        // Notify backend: token expires NOW
+        await fetch(`${API_BASE}/api/playback/start`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ session_id: sessionId }),
+        });
+
+        SecurePlayer.play(sessionId, keyB64, WS_BASE, {
+          onProgress: (pct) => {
+            progressFill.style.width = (pct * 100).toFixed(1) + '%';
+            document.getElementById('playingStatus').textContent =
+              'Streaming… ' + Math.round(pct * 100) + '%';
+          },
+          onEnd: async () => {
+            // Notify backend session is done
+            await fetch(`${API_BASE}/api/playback/done`, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ session_id: sessionId }),
+            }).catch(() => {});
+            showScreen('ended');
+            // Close the tab after a short delay so the user sees the confirmation
+            setTimeout(() => {
+              window.close();
+              // Fallback: if window.close() is blocked (tab wasn't opened by script),
+              // replace with the expired page so it can't be replayed
+              window.location.href = '/expired';
+            }, 3000);
+          },
+          onError: (msg) => {
+            showError('Playback stopped', msg || 'An error occurred during playback.');
+          },
+        });
+
+      }); // end scanLoop
+    });
+
+  })();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureVoice — Expired</title>
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="sv-root">
+    <div class="sv-card" style="text-align:center;">
+      <div class="sv-logo">
+        <span class="sv-logo-mark">
+          <span class="sv-logo-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2 L12 22 M2 12 L22 12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+          </span>
+          <span class="sv-logo-text">SecureVoice</span>
+        </span>
+      </div>
+
+      <div class="sv-expired-icon">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+
+      <h1 class="sv-title">This message has expired</h1>
+      <p class="sv-subtitle">
+        The voice message you were trying to access has already been played,<br/>
+        or the link is no longer valid.
+      </p>
+
+      <div class="sv-divider"></div>
+
+      <p class="sv-footnote">
+        SecureVoice messages are one-time only.<br/>
+        Once played, they cannot be accessed again.
+      </p>
+    </div>
+  </div>
+  <script src="/static/js/security.js"></script>
+</body>
+</html>
